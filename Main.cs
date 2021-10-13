@@ -8,7 +8,7 @@ using Moonlighter.DungeonGeneration;
 
 namespace AssetsLib
 {
-    [BepInPlugin("Aidanamite.AssetsLib", "AssetsLib", "1.0.0")]
+    [BepInPlugin("Aidanamite.AssetsLib", "AssetsLib", "1.0.1")]
     internal class Main : BaseUnityPlugin
     {
         internal static Assembly modAssembly = Assembly.GetExecutingAssembly();
@@ -105,7 +105,7 @@ namespace AssetsLib
         }
 
         public static string RegisterAsset<T>(string name, T obj) where T : UnityEngine.Object => Main.RegisterAsset(Assembly.GetCallingAssembly().GetName().Name + "." + name, obj);
-        public static string RegisterEffect<T>() where T : MoonlighterEffect { Main.RegisterAsset(Assembly.GetCallingAssembly().GetName().Name + "." + typeof(T).Name, new GameObject(typeof(T).Name, typeof(T))); return typeof(T).Name; }
+        public static string RegisterEffect<T>() where T : MoonlighterEffect { Main.RegisterAsset(typeof(T).Name, new GameObject(typeof(T).Name, typeof(T))); return typeof(T).Name; }
         public static StatsModificator CreateStatModifier(int Health = 0, int Defence = 0, int Speed = 0, int MeleeDamage = 0, int RangedDamage = 0)
             => new StatsModificator() { armor = Defence, health = Health, speed = Speed, intelligence = RangedDamage, strength = MeleeDamage };
 
@@ -199,10 +199,14 @@ namespace AssetsLib
                 if (constructor.GetParameters().Length == 0 && !constructor.ContainsGenericParameters)
                 {
                     var nObj = constructor.Invoke(new object[0]);
-                    var nT = Traverse.Create(nObj);
-                    var t = Traverse.Create(obj);
-                    foreach (var f in t.Fields())
-                        nT.Field(f).SetValue(t.Field(f).GetValue());
+                    var t = typeof(T);
+                    while (t != typeof(object))
+                    {
+                        foreach (var f in t.GetFields((BindingFlags)(-1)))
+                            if (!f.IsStatic)
+                                f.SetValue(nObj,f.GetValue(obj));
+                        t = t.BaseType;
+                    }
                     return (T)nObj;
                 }
             return default(T);
