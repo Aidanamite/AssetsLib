@@ -8,7 +8,7 @@ using Moonlighter.DungeonGeneration;
 
 namespace AssetsLib
 {
-    [BepInPlugin("Aidanamite.AssetsLib", "AssetsLib", "1.0.1")]
+    [BepInPlugin("Aidanamite.AssetsLib", "AssetsLib", "1.0.2")]
     internal class Main : BaseUnityPlugin
     {
         internal static Assembly modAssembly = Assembly.GetExecutingAssembly();
@@ -152,14 +152,14 @@ namespace AssetsLib
                 throw new ArgumentNullException("No recipes specified");
             if (string.IsNullOrEmpty(Id))
                 throw new ArgumentNullException("Given recipe id is invalid");
-            Id = Assembly.GetCallingAssembly().GetName().Name + "." + Id;
             if (Main.blacksmithRecipes.Exists((x) => x.collectionName == Id))
-                throw new ExistingRegistryException(Id);
-            Main.blacksmithRecipes.Add(new RecipeCollection
-            {
-                collectionName = Id,
-                recipes = new List<Recipe>(Recipes)
-            });
+                Main.blacksmithRecipes.Find((x) => x.collectionName == Id).recipes.AddRange(Recipes);
+            else
+                Main.blacksmithRecipes.Add(new RecipeCollection
+                {
+                    collectionName = Id,
+                    recipes = new List<Recipe>(Recipes)
+                });
         }
         public static void RegisterWitchRecipeSet(string Id, params Recipe[] Recipes)
         {
@@ -169,14 +169,38 @@ namespace AssetsLib
                 throw new ArgumentNullException("No recipes specified");
             if (string.IsNullOrEmpty(Id))
                 throw new ArgumentNullException("Given recipe id is invalid");
-            Id = Assembly.GetCallingAssembly().GetName().Name + "." + Id;
             if (Main.witchRecipes.Exists((x) => x.collectionName == Id))
-                throw new ExistingRegistryException(Id);
-            Main.witchRecipes.Add(new RecipeCollection
-            {
-                collectionName = Id,
-                recipes = new List<Recipe>(Recipes)
-            });
+                Main.witchRecipes.Find((x) => x.collectionName == Id).recipes.AddRange(Recipes);
+            else
+                Main.witchRecipes.Add(new RecipeCollection
+                {
+                    collectionName = Id,
+                    recipes = new List<Recipe>(Recipes)
+                });
+        }
+    }
+
+    public static class RecipeIds
+    {
+        public static class Blacksmith
+        {
+            public const string Helmets = "headArmors";
+            public const string Chestplates = "bodyArmors";
+            public const string Boots = "feetArmors";
+            public const string ShortSwords = "shortSwords";
+            public const string BigSwords = "bigSwords";
+            public const string Spears = "spears";
+            public const string Gloves = "gloves";
+            public const string Bows = "bows";
+        }
+        public static class Witch
+        {
+            public const string WandererLevel1to2 = "dungeonLvl1to2Potions";
+            public const string WandererLevel3to4 = "dungeonLvl3to4Potions";
+            public const string WandererLevel5to6 = "dungeonLvl5to6Potions";
+            public const string WandererLevel7to8 = "dungeonLvl7to8Potions";
+            public const string WandererLevel9to10 = "dungeonLvl9to10Potions";
+            public const string Potions = "potions";
         }
     }
 
@@ -434,8 +458,16 @@ namespace AssetsLib
                 if (i > 0)
                     RecipeManager.Instance.UpgradeRecipeJSonToPlus(data, i);
                 RecipeManager.Instance.originalData[i].enchantmentRecipes.AddRange(data.enchantmentRecipes);
-                RecipeManager.Instance.originalData[i].witchRecipes.AddRange(data.witchRecipes);
-                RecipeManager.Instance.originalData[i].blacksmithRecipes.AddRange(data.blacksmithRecipes);
+                foreach (var r in data.witchRecipes)
+                    if (RecipeManager.Instance.originalData[i].witchRecipes.Exists((x) => x.collectionName == r.collectionName))
+                        RecipeManager.Instance.originalData[i].witchRecipes.Find((x) => x.collectionName == r.collectionName).recipes.AddRange(r.recipes);
+                    else
+                        RecipeManager.Instance.originalData[i].witchRecipes.Add(r);
+                foreach (var r in data.blacksmithRecipes)
+                    if (RecipeManager.Instance.originalData[i].blacksmithRecipes.Exists((x) => x.collectionName == r.collectionName))
+                        RecipeManager.Instance.originalData[i].blacksmithRecipes.Find((x) => x.collectionName == r.collectionName).recipes.AddRange(r.recipes);
+                    else
+                        RecipeManager.Instance.originalData[i].blacksmithRecipes.Add(r);
             }
         }
     }
