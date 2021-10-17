@@ -8,7 +8,7 @@ using Moonlighter.DungeonGeneration;
 
 namespace AssetsLib
 {
-    [BepInPlugin("Aidanamite.AssetsLib", "AssetsLib", "1.0.2")]
+    [BepInPlugin("Aidanamite.AssetsLib", "AssetsLib", "1.0.3")]
     internal class Main : BaseUnityPlugin
     {
         internal static Assembly modAssembly = Assembly.GetExecutingAssembly();
@@ -219,11 +219,11 @@ namespace AssetsLib
         }
         public static T MemberwiseClone<T>(this T obj)
         {
-            foreach (var constructor in typeof(T).GetConstructors((BindingFlags)(-1)))
+            foreach (var constructor in obj.GetType().GetConstructors((BindingFlags)(-1)))
                 if (constructor.GetParameters().Length == 0 && !constructor.ContainsGenericParameters)
                 {
                     var nObj = constructor.Invoke(new object[0]);
-                    var t = typeof(T);
+                    var t = obj.GetType();
                     while (t != typeof(object))
                     {
                         foreach (var f in t.GetFields((BindingFlags)(-1)))
@@ -430,6 +430,7 @@ namespace AssetsLib
                     else if (item.plusLevel < i)
                     {
                         var newItem = item.MemberwiseClone();
+                        newItem.plusLevel = i;
                         added.Add(newItem);
                         ItemDatabase.Instance.itemCollections[i].items.Add(newItem);
                     }
