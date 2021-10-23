@@ -8,7 +8,7 @@ using Moonlighter.DungeonGeneration;
 
 namespace AssetsLib
 {
-    [BepInPlugin("Aidanamite.AssetsLib", "AssetsLib", "1.0.3")]
+    [BepInPlugin("Aidanamite.AssetsLib", "AssetsLib", "1.0.8")]
     internal class Main : BaseUnityPlugin
     {
         internal static Assembly modAssembly = Assembly.GetExecutingAssembly();
@@ -106,8 +106,8 @@ namespace AssetsLib
 
         public static string RegisterAsset<T>(string name, T obj) where T : UnityEngine.Object => Main.RegisterAsset(Assembly.GetCallingAssembly().GetName().Name + "." + name, obj);
         public static string RegisterEffect<T>() where T : MoonlighterEffect { Main.RegisterAsset(typeof(T).Name, new GameObject(typeof(T).Name, typeof(T))); return typeof(T).Name; }
-        public static StatsModificator CreateStatModifier(int Health = 0, int Defence = 0, int Speed = 0, int MeleeDamage = 0, int RangedDamage = 0)
-            => new StatsModificator() { armor = Defence, health = Health, speed = Speed, intelligence = RangedDamage, strength = MeleeDamage };
+        public static StatsModificator CreateStatModifier(int Health = 0, int Defence = 0, int Speed = 0, int MeleeDamage = 0, int RangedDamage = 0, Action<StatsModificator, int> PlusLevelModifier = null)
+            => new CustomStatsModificator() { armor = Defence, health = Health, speed = Speed, intelligence = RangedDamage, strength = MeleeDamage, generator = PlusLevelModifier };
 
         public static void CreateAndRegisterEnchantmentRecipe(EquipmentItemMaster Item,
             StatsModificator StatModifier, int Cost, List<RecipeIngredient> Ingredients,
@@ -133,7 +133,8 @@ namespace AssetsLib
         public static Recipe CreateRecipe(ItemMaster CraftedItem,
             List<RecipeIngredient> Ingredients, int Cost,
             int MinPlusLevel = 0, bool PriceIsFixed = true,
-            int SortingIndex = int.MaxValue, bool UnlockedAtStart = true)
+            int SortingIndex = int.MaxValue, bool UnlockedAtStart = true,
+            string PlaceAfterItem = null)
             => new Recipe {
                 craftedItemName = CraftedItem.name,
                 craftedItemNameKey = CraftedItem.nameKey,
@@ -204,7 +205,7 @@ namespace AssetsLib
         }
     }
 
-    public class ExistingRegistryException : Exception { public ExistingRegistryException(string message) : base($"An has already been registered with the name \"{message}\"") { } }
+    public class ExistingRegistryException : Exception { public ExistingRegistryException(string message) : base($"An asset has already been registered with the name \"{message}\"") { } }
 
     public static class ExtentionMethods
     {
@@ -327,6 +328,17 @@ namespace AssetsLib
         }
     }
 
+    internal class CustomStatsModificator : StatsModificator
+    {
+        public Action<StatsModificator, int> generator = null;
+        public void Generate(int plusLevel)
+        {
+            if (generator == null)
+                return;
+            generator(this,plusLevel);
+        }
+    }
+
     public struct SpawnWeight
     {
         internal OverrideType type;
@@ -431,6 +443,12 @@ namespace AssetsLib
                     {
                         var newItem = item.MemberwiseClone();
                         newItem.plusLevel = i;
+                        if (newItem is EquipmentItemMaster && (newItem as EquipmentItemMaster).stats is CustomStatsModificator)
+                        {
+                            var e = newItem as EquipmentItemMaster;
+                            e.stats = e.stats.MemberwiseClone();
+                            (e.stats as CustomStatsModificator).Generate(i);
+                        }
                         added.Add(newItem);
                         ItemDatabase.Instance.itemCollections[i].items.Add(newItem);
                     }
@@ -458,6 +476,12 @@ namespace AssetsLib
                 var data = new RecipeManager.RecipeJSONData() { blacksmithRecipes = brcl, enchantmentRecipes = erl, witchRecipes = wrcl };
                 if (i > 0)
                     RecipeManager.Instance.UpgradeRecipeJSonToPlus(data, i);
+                foreach (var r in data.enchantmentRecipes)
+                    if (r.stats is CustomStatsModificator)
+                    {
+                        r.stats = r.stats.MemberwiseClone();
+                        (r.stats as CustomStatsModificator).Generate(i);
+                    }
                 RecipeManager.Instance.originalData[i].enchantmentRecipes.AddRange(data.enchantmentRecipes);
                 foreach (var r in data.witchRecipes)
                     if (RecipeManager.Instance.originalData[i].witchRecipes.Exists((x) => x.collectionName == r.collectionName))
@@ -470,6 +494,23 @@ namespace AssetsLib
                     else
                         RecipeManager.Instance.originalData[i].blacksmithRecipes.Add(r);
             }
+        }
+    }
+
+    [HarmonyPatch(typeof(BlacksmithPanel), "CompareArmors")]
+    internal class Patch_BlacksmithRecipeSorting
+    {
+        static bool Prefix(Recipe x, Recipe y, ref int __result)
+        {
+            EquipmentItemMaster equipmentItemMaster = x.GetCraftedItem() as EquipmentItemMaster;
+            EquipmentItemMaster equipmentItemMaster2 = y.GetCraftedItem() as EquipmentItemMaster;
+            if ((x.LoadedFromDLC == y.LoadedFromDLC) && equipmentItemMaster.equipmentSlot == equipmentItemMaster2.equipmentSlot)
+            {
+                __result = x.sorting - y.sorting;
+                if (__result != 0)
+                    return false;
+            }
+            return true;
         }
     }
 
@@ -555,7 +596,7 @@ namespace AssetsLib
             var customSpawns = new Dictionary<ItemMaster, SpawnWeight>();
             foreach (var spawn in Main.overrideSpawnData)
             {
-                var i = ItemDatabase.GetItemByName(spawn.Key);
+                var i = ItemDatabase.GetItemByName(spawn.Key, plusLevel);
                 if (i != null)
                     customSpawns.Add(i, spawn.Value);
             }
